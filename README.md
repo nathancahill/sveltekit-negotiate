@@ -65,7 +65,10 @@ export { handle } from '$lib/negotiate';
 
 ```ts
 // src/hooks.ts
-export { reroute } from '$lib/negotiate';
+import type { Reroute } from '@sveltejs/kit';
+import { reroute as negotiateReroute } from '$lib/negotiate';
+
+export const reroute: Reroute = ({ url }) => negotiateReroute(url.pathname);
 ```
 
 ### 3. Mount the `<Negotiate />` component in your layout
@@ -183,11 +186,33 @@ import { handle as auth } from '$lib/auth';
 export const handle = sequence(negotiate, auth);
 ```
 
-### `reroute`
+### `reroute(pathname)`
 
-A SvelteKit [`Reroute`](https://svelte.dev/docs/kit/hooks#universal-hooks-reroute)
-that strips registered extensions so `/posts/hello.md` resolves to the
-`/posts/hello` route.
+A plain pathname transform: given a URL pathname, returns it with any
+registered extension stripped (`/posts/hello.md` → `/posts/hello`), or
+unchanged if no extension matches. Because it takes and returns a string,
+it composes by function chaining with other pathname transforms — which
+is how SvelteKit resolves its own `reroute` hook internally.
+
+Wire it into SvelteKit's [`Reroute`](https://svelte.dev/docs/kit/hooks#universal-hooks-reroute)
+hook in `src/hooks.ts`:
+
+```ts
+import type { Reroute } from '@sveltejs/kit';
+import { reroute as negotiateReroute } from '$lib/negotiate';
+
+export const reroute: Reroute = ({ url }) => negotiateReroute(url.pathname);
+```
+
+To compose with other rerouters, just chain the calls:
+
+```ts
+import type { Reroute } from '@sveltejs/kit';
+import { reroute as negotiateReroute } from '$lib/negotiate';
+import { reroute as i18nReroute } from '$lib/i18n';
+
+export const reroute: Reroute = ({ url }) => i18nReroute(negotiateReroute(url.pathname));
+```
 
 ### `negotiate(locals, handlers)`
 

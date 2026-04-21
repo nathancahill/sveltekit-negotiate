@@ -1,4 +1,4 @@
-import type { Handle, Reroute, RequestEvent } from '@sveltejs/kit';
+import type { Handle, RequestEvent } from '@sveltejs/kit';
 import type { Component } from 'svelte';
 
 import NegotiateComponent from './negotiate.svelte';
@@ -121,13 +121,14 @@ export function createNegotiation<T extends Record<string, TypeConfig>>(types: T
 		});
 	};
 
-	const reroute: Reroute = ({ url }) => {
+	const reroute = (url: string) => {
 		for (const ext of extensionToMime.keys()) {
-			if (url.pathname.endsWith(ext)) {
-				const stripped = url.pathname.slice(0, -ext.length);
+			if (url.endsWith(ext)) {
+				const stripped = url.slice(0, -ext.length);
 				return stripped === '' ? '/' : stripped;
 			}
 		}
+		return url;
 	};
 
 	type Handlers = Partial<Record<Mime, () => string | object>>;

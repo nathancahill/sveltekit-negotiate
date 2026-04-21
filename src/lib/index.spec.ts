@@ -47,21 +47,25 @@ describe('reroute', () => {
 	const { reroute } = createNegotiation(types);
 
 	it('strips a registered extension from the pathname', () => {
-		expect(reroute({ url: new URL('http://localhost/posts/hello.md') } as never)).toBe(
-			'/posts/hello'
-		);
+		expect(reroute('/posts/hello.md')).toBe('/posts/hello');
 	});
 
 	it('normalises a bare extension at the root to /', () => {
-		expect(reroute({ url: new URL('http://localhost/.json') } as never)).toBe('/');
+		expect(reroute('/.json')).toBe('/');
 	});
 
-	it('returns undefined for paths without a registered extension', () => {
-		expect(reroute({ url: new URL('http://localhost/about') } as never)).toBeUndefined();
+	it('returns the pathname unchanged for paths without a registered extension', () => {
+		expect(reroute('/about')).toBe('/about');
 	});
 
 	it('leaves unknown extensions alone', () => {
-		expect(reroute({ url: new URL('http://localhost/feed.xml') } as never)).toBeUndefined();
+		expect(reroute('/feed.xml')).toBe('/feed.xml');
+	});
+
+	it('composes with other pathname transforms', () => {
+		const stripLocale = (url: string) => url.replace(/^\/(en|fr)(?=\/|$)/, '') || '/';
+		expect(stripLocale(reroute('/en/posts/hello.md'))).toBe('/posts/hello');
+		expect(stripLocale(reroute('/fr/about'))).toBe('/about');
 	});
 });
 

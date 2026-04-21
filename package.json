@@ -1,6 +1,6 @@
 {
 	"name": "sveltekit-negotiate",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Drop-in HTTP content negotiation for SvelteKit. Serve the same route as HTML, Markdown, JSON, XML or any format driven by the Accept header or a URL extension.",
 	"scripts": {
 		"dev": "vite dev",

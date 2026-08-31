@@ -21,7 +21,8 @@ curl                                https://example.com/posts/hello.md  # via ex
 - Works with SvelteKit's regular `load` functions — no bespoke endpoints
 - Pluggable per-type serializers (JSON, Markdown, XML, YAML, anything)
 - Tiny, zero runtime dependencies, fully typed
-- Sets the `Vary: accept` header so caches behave correctly
+- Sets `Vary: accept` on every negotiable response — including the HTML one —
+  so shared caches stay correct
 
 ## Install
 
@@ -135,11 +136,15 @@ asking.
 3. Any `load` that called `negotiate(locals, { … })` produces a
    serialized payload which the `<Negotiate />` component embeds in
    `<svelte:head>` as `<script type="text/plain" id="__negotiate">…</script>`.
-4. On the way back out, `handle` extracts that payload, returns it with the
-   negotiated `Content-Type`, and adds `Vary: accept` so CDNs cache
-   correctly.
-5. `reroute` rewrites `/foo.md` → `/foo` so extension-based URLs hit the
-   normal route tree.
+4. On the way back out, `handle` extracts that payload and returns it with the
+   negotiated `Content-Type`, carrying over the headers your app already set —
+   cookies, `setHeaders()` values, anything another hook added.
+5. Every HTML response for a negotiable URL also gets `Vary: accept`, not just
+   the negotiated ones, so a shared cache can't hand stored HTML to the next
+   client that asks for Markdown.
+6. `reroute` rewrites `/foo.md` → `/foo` so extension-based URLs hit the
+   normal route tree, and `handle` strips the extension from `event.url` to
+   match.
 
 If the negotiated type has no handler on a route, `handle` responds with a
 `406 Not Acceptable`.
@@ -185,6 +190,24 @@ import { handle as auth } from '$lib/auth';
 
 export const handle = sequence(negotiate, auth);
 ```
+
+`handle` preserves the headers your app set — cookies, `setHeaders()` values,
+security headers from another hook — and replaces only `Content-Type`. Headers
+that described the HTML body it swapped out (`ETag`, `Content-Length`, …) are
+dropped, since they no longer match what is sent. Because the header set
+survives, a hook that sets `Cache-Control` works on either side of `negotiate`
+in a `sequence`.
+
+#### Prerendering
+
+For an extension URL, `handle` strips the extension from `event.url` once the
+type is picked, so `page.url.pathname` is the canonical `/foo` rather than
+`/foo.md`. This matters for prerendering: SvelteKit derives the data path from
+`event.url`, so `/foo.md` would yield `/foo.md/__data.json`, whose directory
+collides with the `foo.md` file the prerenderer just wrote.
+
+`event.request.url` keeps the URL as requested if you need it. Note that the
+`reroute` hook must be installed for extension URLs to route at all.
 
 ### `reroute(pathname)`
 

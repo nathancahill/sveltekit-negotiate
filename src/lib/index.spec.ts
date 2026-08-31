@@ -208,6 +208,206 @@ describe('handle – response handling', () => {
 	});
 });
 
+describe('handle – header preservation', () => {
+	const { handle } = createNegotiation(types);
+
+	it('keeps app headers on the negotiated response', async () => {
+		const event = mockEvent({ accept: 'application/json' });
+		const resolve = async () =>
+			new Response(htmlWithPayload('{"ok":true}'), {
+				headers: {
+					'content-type': 'text/html; charset=utf-8',
+					'cache-control': 'max-age=600',
+					'set-cookie': 'session=abc; Path=/',
+					'x-sveltekit-routeid': '/demo',
+					'x-frame-options': 'DENY'
+				}
+			});
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.headers.get('cache-control')).toBe('max-age=600');
+		expect(response.headers.get('set-cookie')).toBe('session=abc; Path=/');
+		expect(response.headers.get('x-sveltekit-routeid')).toBe('/demo');
+		expect(response.headers.get('x-frame-options')).toBe('DENY');
+		expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
+	});
+
+	it('drops headers that describe the replaced body', async () => {
+		const event = mockEvent({ accept: 'application/json' });
+		const resolve = async () =>
+			new Response(htmlWithPayload('{"ok":true}'), {
+				headers: {
+					'content-type': 'text/html',
+					etag: '"html-version"',
+					'content-length': '1234',
+					'last-modified': 'Wed, 21 Oct 2015 07:28:00 GMT'
+				}
+			});
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.headers.get('etag')).toBeNull();
+		expect(response.headers.get('content-length')).toBeNull();
+		expect(response.headers.get('last-modified')).toBeNull();
+	});
+
+	it('preserves the upstream status code', async () => {
+		const event = mockEvent({ accept: 'application/json' });
+		const resolve = async () =>
+			new Response(htmlWithPayload('{"ok":true}'), {
+				status: 203,
+				headers: { 'content-type': 'text/html' }
+			});
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.status).toBe(203);
+	});
+
+	it('keeps cookies but not the caching policy on the 406', async () => {
+		const event = mockEvent({ accept: 'application/json' });
+		const resolve = async () =>
+			new Response('<h1>hi</h1>', {
+				headers: {
+					'content-type': 'text/html',
+					'cache-control': 'max-age=600',
+					'set-cookie': 'session=abc; Path=/'
+				}
+			});
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.status).toBe(406);
+		expect(response.headers.get('set-cookie')).toBe('session=abc; Path=/');
+		expect(response.headers.get('cache-control')).toBeNull();
+		expect(response.headers.get('vary')).toBe('accept');
+	});
+});
+
+describe('handle – vary', () => {
+	const { handle } = createNegotiation(types);
+
+	it('adds vary to an HTML response that was not negotiated', async () => {
+		const event = mockEvent({ accept: 'text/html' });
+		const resolve = async () =>
+			new Response('<h1>hi</h1>', { headers: { 'content-type': 'text/html' } });
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.headers.get('vary')).toBe('accept');
+		await expect(response.text()).resolves.toBe('<h1>hi</h1>');
+	});
+
+	it('appends to an existing vary header', async () => {
+		const event = mockEvent({ accept: 'text/html' });
+		const resolve = async () =>
+			new Response('<h1>hi</h1>', {
+				headers: { 'content-type': 'text/html', vary: 'cookie' }
+			});
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.headers.get('vary')).toBe('cookie, accept');
+	});
+
+	it('does not duplicate an accept already present in vary', async () => {
+		const event = mockEvent({ accept: 'text/html' });
+		const resolve = async () =>
+			new Response('<h1>hi</h1>', {
+				headers: { 'content-type': 'text/html', vary: 'Accept' }
+			});
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.headers.get('vary')).toBe('Accept');
+	});
+
+	it('leaves a wildcard vary alone', async () => {
+		const event = mockEvent({ accept: 'text/html' });
+		const resolve = async () =>
+			new Response('<h1>hi</h1>', {
+				headers: { 'content-type': 'text/html', vary: '*' }
+			});
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.headers.get('vary')).toBe('*');
+	});
+
+	it('adds vary to a non-ok HTML response', async () => {
+		const event = mockEvent({ accept: 'text/html' });
+		const resolve = async () =>
+			new Response('boom', { status: 500, headers: { 'content-type': 'text/html' } });
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.status).toBe(500);
+		expect(response.headers.get('vary')).toBe('accept');
+	});
+
+	it('does not add vary to non-HTML responses', async () => {
+		const event = mockEvent({ accept: 'text/html' });
+		const resolve = async () =>
+			new Response('{"a":1}', { headers: { 'content-type': 'application/json' } });
+
+		const response = await handle({ event, resolve } as never);
+		expect(response.headers.get('vary')).toBeNull();
+	});
+});
+
+describe('handle – url normalisation', () => {
+	const { handle } = createNegotiation(types);
+
+	it('strips the extension from event.url before resolving', async () => {
+		const event = mockEvent({ pathname: '/posts/hello.md' });
+		let seen: string | undefined;
+		const resolve = async (resolved: RequestEvent) => {
+			seen = resolved.url.pathname;
+			return new Response(htmlWithPayload('# hello'), {
+				headers: { 'content-type': 'text/html' }
+			});
+		};
+
+		await handle({ event, resolve } as never);
+		expect(seen).toBe('/posts/hello');
+		expect(event.url.pathname).toBe('/posts/hello');
+	});
+
+	it('normalises a bare extension request to the root', async () => {
+		const event = mockEvent({ pathname: '/.md' });
+		const resolve = async () =>
+			new Response(htmlWithPayload('# hello'), { headers: { 'content-type': 'text/html' } });
+
+		await handle({ event, resolve } as never);
+		expect(event.url.pathname).toBe('/');
+	});
+
+	it('leaves the url alone when the type came from the Accept header', async () => {
+		const event = mockEvent({ pathname: '/posts/hello', accept: 'text/markdown' });
+		const resolve = async () =>
+			new Response(htmlWithPayload('# hello'), { headers: { 'content-type': 'text/html' } });
+
+		await handle({ event, resolve } as never);
+		expect(event.url.pathname).toBe('/posts/hello');
+	});
+});
+
+describe('handle – payload decoding', () => {
+	const { handle } = createNegotiation(types);
+
+	it('unescapes </script sequences that have no trailing bracket', async () => {
+		const event = mockEvent({ accept: 'text/markdown' });
+		const payload = 'before </script after\nand </scriptfoo too';
+		const resolve = async () =>
+			new Response(htmlWithPayload(payload), { headers: { 'content-type': 'text/html' } });
+
+		const response = await handle({ event, resolve } as never);
+		await expect(response.text()).resolves.toBe(payload);
+	});
+
+	it('preserves leading and trailing whitespace in the payload', async () => {
+		const event = mockEvent({ accept: 'text/markdown' });
+		const payload = '# Title\n\nBody text\n';
+		const resolve = async () =>
+			new Response(htmlWithPayload(payload), { headers: { 'content-type': 'text/html' } });
+
+		const response = await handle({ event, resolve } as never);
+		await expect(response.text()).resolves.toBe(payload);
+	});
+});
+
 describe('negotiate', () => {
 	const { negotiate } = createNegotiation({
 		'text/markdown': { extension: '.md' },

@@ -9,7 +9,7 @@
 		{ label: 'JSON', href: '/demo.json', type: 'application/json' }
 	];
 
-	const origin = 'http://localhost:5173';
+	const origin = 'https://sveltekit-negotiate.vercel.app';
 
 	const publishedLong = $derived(
 		new Date(post.published).toLocaleDateString(undefined, {

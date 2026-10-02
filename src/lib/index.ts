@@ -3,10 +3,9 @@ import type { RequestEvent } from '@sveltejs/kit';
 import type { Component } from 'svelte';
 
 import NegotiateComponent from './negotiate.svelte';
+import { NEGOTIATE_ID, extractPayload } from './payload.ts';
 
 const Negotiate: Component<Record<string, never>> = NegotiateComponent;
-
-const NEGOTIATE_ID = '__negotiate';
 
 // These describe the body we are about to replace. Carrying an ETag over to a different
 // representation would let a cache serve it under the HTML's validator.
@@ -100,11 +99,6 @@ export function createNegotiation<T extends Record<string, TypeConfig>>(types: T
 	);
 	const mimes = entries.map(([mime]) => mime);
 
-	const extractRegex = new RegExp(
-		`<script[^>]*type=["']text\\/plain["'][^>]*id=["']${NEGOTIATE_ID}["'][^>]*>([\\s\\S]*?)<\\/script>`,
-		'i'
-	);
-
 	// Shared by `reroute` and `handle` so the two can't drift.
 	function stripExtension(pathname: string): string | null {
 		for (const ext of extensionToMime.keys()) {
@@ -169,10 +163,9 @@ export function createNegotiation<T extends Record<string, TypeConfig>>(types: T
 			return isHtml ? withVary(response) : response;
 		}
 
-		const html = await response.text();
-		const match = html.match(extractRegex);
+		const content = extractPayload(await response.text());
 
-		if (!match) {
+		if (content === null) {
 			return new Response(`No payload registered for ${matched.mime} on this route.`, {
 				status: 406,
 				// Keep cookies and security headers, but don't cache an error under the page's own
@@ -180,11 +173,6 @@ export function createNegotiation<T extends Record<string, TypeConfig>>(types: T
 				headers: carryHeaders(response.headers, 'text/plain; charset=utf-8', ['cache-control'])
 			});
 		}
-
-		// Mirror the escape in negotiate.svelte exactly — it matches `</script` with no trailing
-		// `>`. Don't trim: the component interpolates the payload verbatim, so any leading or
-		// trailing whitespace belongs to the payload.
-		const content = match[1].replace(/<\\\/script/gi, '</script');
 
 		return new Response(content, {
 			status: response.status,

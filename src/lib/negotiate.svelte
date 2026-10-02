@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { page } from "$app/state";
+	import { page } from '$app/state';
+	import { NEGOTIATE_ID, renderPayload } from './payload.ts';
 
-  const NEGOTIATE_ID = "__negotiate";
-  const raw = page.data[NEGOTIATE_ID] as string | undefined;
-  const encoded = raw?.replace(/<\/script/gi, "<\\/script");
+	// The markup is built in payload.ts: see the note there for why it can't live in this file.
+	const raw = page.data[NEGOTIATE_ID] as string | undefined;
 </script>
 
 <svelte:head>
-  {#if encoded !== undefined}
-    {@html `<script type="text/plain" id="${NEGOTIATE_ID}">${encoded}</script>`}
-  {/if}
+	{#if raw !== undefined}
+		{@html renderPayload(raw)}
+	{/if}
 </svelte:head>

@@ -406,6 +406,21 @@ describe('handle – payload decoding', () => {
 		const response = await handle({ event, resolve } as never);
 		await expect(response.text()).resolves.toBe(payload);
 	});
+
+	it.each([
+		['id before type', '<script id="__negotiate" type="text/plain">'],
+		['no type', '<script id="__negotiate">'],
+		['extra attributes', "<script nonce=\"abc\" type='text/plain' data-x id='__negotiate'>"]
+	])('finds the payload tag with %s', async (_, open) => {
+		const event = mockEvent({ accept: 'text/markdown' });
+		const resolve = async () =>
+			new Response(`<html><head>${open}# hi</script></head></html>`, {
+				headers: { 'content-type': 'text/html' }
+			});
+
+		const response = await handle({ event, resolve } as never);
+		await expect(response.text()).resolves.toBe('# hi');
+	});
 });
 
 describe('negotiate', () => {

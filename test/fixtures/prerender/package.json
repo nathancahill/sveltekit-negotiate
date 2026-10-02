@@ -1,0 +1,5 @@
+{
+	"name": "negotiate-prerender-fixture",
+	"private": true,
+	"type": "module"
+}

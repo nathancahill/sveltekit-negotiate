@@ -34,7 +34,7 @@ pnpm add sveltekit-negotiate
 yarn add sveltekit-negotiate
 ```
 
-Requires Svelte 5 and SvelteKit 2.
+Requires Svelte 5 and SvelteKit 3 (Node 22.17+). For SvelteKit 2, use `sveltekit-negotiate@^0.2`.
 
 ## Quick start
 
@@ -61,13 +61,13 @@ rewrites the rendered HTML response to the negotiated payload on the way out.
 
 ```ts
 // src/hooks.server.ts
-export { handle } from '$lib/negotiate';
+export { handle } from '#lib/negotiate.js';
 ```
 
 ```ts
 // src/hooks.ts
-import type { Reroute } from '@sveltejs/kit';
-import { reroute as negotiateReroute } from '$lib/negotiate';
+import type { Reroute } from '@sveltejs/kit/hooks';
+import { reroute as negotiateReroute } from '#lib/negotiate.js';
 
 export const reroute: Reroute = ({ url }) => negotiateReroute(url.pathname);
 ```
@@ -80,7 +80,7 @@ can pluck it back out server-side. Put it in your root layout once.
 ```svelte
 <!-- src/routes/+layout.svelte -->
 <script lang="ts">
-	import { Negotiate } from '$lib/negotiate';
+	import { Negotiate } from '#lib/negotiate.js';
 
 	let { children } = $props();
 </script>
@@ -98,7 +98,7 @@ cost you a JSON serialization.
 
 ```ts
 // src/routes/posts/[slug]/+page.server.ts
-import { negotiate } from '$lib/negotiate';
+import { negotiate } from '#lib/negotiate.js';
 
 export const load = async ({ params, locals }) => {
 	const post = await getPost(params.slug);
@@ -185,8 +185,8 @@ needed.
 ```ts
 // src/hooks.server.ts
 import { sequence } from '@sveltejs/kit/hooks';
-import { handle as negotiate } from '$lib/negotiate';
-import { handle as auth } from '$lib/auth';
+import { handle as negotiate } from '#lib/negotiate.js';
+import { handle as auth } from '#lib/auth.js';
 
 export const handle = sequence(negotiate, auth);
 ```
@@ -221,8 +221,8 @@ Wire it into SvelteKit's [`Reroute`](https://svelte.dev/docs/kit/hooks#universal
 hook in `src/hooks.ts`:
 
 ```ts
-import type { Reroute } from '@sveltejs/kit';
-import { reroute as negotiateReroute } from '$lib/negotiate';
+import type { Reroute } from '@sveltejs/kit/hooks';
+import { reroute as negotiateReroute } from '#lib/negotiate.js';
 
 export const reroute: Reroute = ({ url }) => negotiateReroute(url.pathname);
 ```
@@ -230,9 +230,9 @@ export const reroute: Reroute = ({ url }) => negotiateReroute(url.pathname);
 To compose with other rerouters, just chain the calls:
 
 ```ts
-import type { Reroute } from '@sveltejs/kit';
-import { reroute as negotiateReroute } from '$lib/negotiate';
-import { reroute as i18nReroute } from '$lib/i18n';
+import type { Reroute } from '@sveltejs/kit/hooks';
+import { reroute as negotiateReroute } from '#lib/negotiate.js';
+import { reroute as i18nReroute } from '#lib/i18n.js';
 
 export const reroute: Reroute = ({ url }) => i18nReroute(negotiateReroute(url.pathname));
 ```
